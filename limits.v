@@ -1,103 +1,72 @@
 Require Import ZArith.
-
-Open Scope Z_scope.
-
-Definition tst1 := 2 <= 4.
-
-Print Z.le.
-
-Search Z.le.
-
-Print Z.
-Print Z.compare.
-Compute (2 ?= 4).
-
-Theorem tst1_true: tst1.
-Proof. intros. unfold tst1. apply Z.le_trans with (m:=3). apply Z.le_succ_diag_r. apply Z.le_succ_diag_r. Qed.
-
-Require Import QArith.
-
-Open Scope Q_scope.
-Compute (3 # 4) + (2 # 3) <= 100 # 4.
-
-Set Printing All.
-Check (1 <= 2 <= 3) %Z.
-Unset Printing All.
-
-Search Q.
-
-Theorem xxx: true <> false.
-Proof. unfold not. intro. discriminate.
-Qed.
-
-Print xxx.
-Print eq_ind.
-Print True_ind.
-Print Qmult_0_l.
-
-Check eq_ind false.
-
-(* Set Printing All. *)
-Print Qeq.
-
-Require Import ZArith.
 Require Import QArith.
 Open Scope Q_scope.
-
-Theorem q_less: forall x y z, (0 <= x <= y)%Z -> x # z <= y # z.
-Proof. intros. destruct H as [Hl Hr]. rewrite (Zle_Qle x y) in Hr.
-       rewrite <- (Qmult_le_l (inject_Z x) (inject_Z y) (/ inject_Z (Zpos z))) in Hr. simpl in Hr.
-       - rewrite Qmult_comm in Hr. rewrite Qmult_comm with (x := / inject_Z (Z.pos z)) in Hr.
-         unfold inject_Z in Hr. unfold Qinv in Hr. destruct (Qnum (Z.pos z # 1)) eqn:ZV.
-         + simpl in ZV. discriminate.
-         + simpl in Hr. simpl in ZV. injection ZV. intro ZP. unfold Qmult in Hr. simpl in Hr.
-           rewrite <- ZP in Hr. rewrite Z.mul_1_r in Hr. rewrite Z.mul_1_r in Hr. exact Hr.
-         + simpl in ZV. discriminate.
-       - unfold Qinv. simpl. apply Z.lt_0_1.
-Qed.
-
-Check Z.
 
 Inductive Seq (T:Set) := mkSeq (seq_elt:nat->T).
 Definition elt {T:Set} (seq: Seq T) n := match seq with
                                          | mkSeq _ f => f n
                                          end.
 
-Check elt.
-Check mkSeq.
-Check Seq.
-
-Check 1.
-Check mkSeq Q (fun n => 1).
-Check Seq Q.
-Check cons 1 nil.
-
 Inductive converging_qseq: Seq Q -> Prop :=
  ex_limit (s:Seq Q) (a:Q) (H: forall eps:Q, eps>0 -> exists (n0:nat), forall (n:nat), (n0 <= n)%nat -> a - eps < elt s n /\
                                                                        a + eps > elt s n)
  : converging_qseq s.
 
-Definition const_qseq := fun a => mkSeq Q (fun n => a).
+Definition qseq_const := fun a => mkSeq Q (fun n => a).
+Definition qseq_plus sx sy := mkSeq Q (fun n => elt sx n + elt sy n).
 
-(* Open Scope Z_scope. *)
-(* Lemma zlt_pos: forall a,b,p ->  *)
 
-(* Set Printing All. *)
-
+Open Scope Q_scope.
 Lemma lt_lower: forall a p, p > 0 -> a - p < a.
-Admitted.
-Lemma le_lower: forall a p, p >= 0 -> a - p <= a.
-Proof.
-  intros. unfold Qminus. rewrite <- Qplus_0_r with (x:=a) at 2. apply (Qplus_le_compat a a (-p) (0%Q)).
-  - apply Qle_refl.
-  - (* apply Qopp_le_compat. *)
-    Admitted.
+Proof. intros. unfold Qminus. rewrite <- Qplus_0_r with (x:=a) at 2.
+       rewrite Qplus_comm. rewrite (Qplus_comm a 0). apply (Qplus_lt_le_compat (-p) 0 a a ).
+       - unfold Qlt. simpl. rewrite Z.mul_comm. rewrite (Z.mul_1_l (-Qnum p)).
+         unfold Qlt in H. simpl in H. rewrite Z.mul_comm in H. rewrite (Z.mul_1_l (Qnum p)) in H.
+         apply Z.opp_lt_mono. rewrite Z.opp_involutive. rewrite Z.opp_0. exact H.
+       - apply Z.le_refl.
+Qed.
 
-
-Theorem const_converging: forall a, converging_qseq (const_qseq a).
-Proof. intros. apply (ex_limit (const_qseq a) a).
+Theorem converging_const: forall a, converging_qseq (qseq_const a).
+Proof. intros. apply (ex_limit (qseq_const a) a).
        intros eps Heps. exists 0%nat. intros.
        split.
        - simpl. apply lt_lower. exact Heps.
        - simpl. rewrite <- Qplus_0_l at 1.  rewrite (Qplus_comm a eps). rewrite Qplus_lt_l. exact Heps.
 Qed.
+
+
+Lemma split_halfs: forall a, a == a * (1#2) + a * (1#2).
+Proof. intros. ring_simplify. easy.
+Qed.
+
+Lemma dswap: forall a b c d, a+b+c+d == (a+c) +(b+d).
+  intros. ring_simplify. easy.
+Qed.
+
+Theorem converging_sum: forall s1 s2, converging_qseq s1 -> converging_qseq s2 -> converging_qseq (qseq_plus s1 s2).
+Proof. intros s1 s2 H1 H2. destruct H1 as [s1 a Ha]. destruct H2 as [s2 b Hb].
+       apply (ex_limit (qseq_plus s1 s2) (a+b)). intros.
+
+       assert (0 < 1#2) as Heps2. { unfold Qlt. simpl. apply Z.lt_0_1. }
+       assert (HH := Qmult_lt_compat_r 0 eps (1#2) Heps2 H).  rewrite Qmult_0_l in HH.
+       assert (Ha := Ha (eps * (1#2) ) HH).
+       assert (Hb := Hb (eps * (1#2) ) HH).
+       destruct Ha as [na Ha]. destruct Hb as [nb Hb].
+       set (mab := max na nb).
+       exists mab. intros n Hmax.
+
+       split.
+       (* lower bound *)
+       - rewrite (split_halfs eps) at 1. unfold Qminus. rewrite Qopp_plus. rewrite Qplus_assoc.
+         rewrite dswap. simpl.
+         apply Qplus_lt_le_compat.
+         + apply Ha.  apply Nat.le_trans with (m:= mab). apply Nat.le_max_l. exact Hmax.
+         + unfold Qminus in Hb. apply Qlt_le_weak. apply Hb.
+           apply Nat.le_trans with (m:= mab). apply Nat.le_max_r. exact Hmax.
+       (* upper bound *)
+       - rewrite (split_halfs eps). rewrite Qplus_assoc, dswap.
+         apply Qplus_lt_le_compat.
+         + apply Ha. apply Nat.le_trans with (m:= mab). apply Nat.le_max_l. exact Hmax.
+         + apply Qlt_le_weak. apply Hb. apply Nat.le_trans with (m:= mab). apply Nat.le_max_r. exact Hmax.
+Qed.
+
